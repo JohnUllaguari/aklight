@@ -1,0 +1,51 @@
+services:
+  broker1:
+    build: ./broker
+    container_name: broker1
+    networks:
+      - aklight-net
+    volumes:
+      - ./broker/storage:/data
+    environment:
+      - BROKER_ID=1
+      - MESSAGE_RETENTION=60
+
+  broker2:
+    build: ./broker
+    container_name: broker2
+    networks:
+      - aklight-net
+    volumes:
+      - ./broker/storage:/data
+    environment:
+      - BROKER_ID=2
+      - MESSAGE_RETENTION=60
+
+  producer1:
+    build: ./producer
+    container_name: producer1
+    networks:
+      - aklight-net
+    depends_on:
+      - broker1
+
+  producer2:
+    build: ./producer
+    container_name: producer2
+    networks:
+      - aklight-net
+    depends_on:
+      - broker2
+
+  consumer:
+    build: ./consumer
+    container_name: consumer
+    networks:
+      - aklight-net
+    depends_on:
+      - broker1
+      - broker2
+
+networks:
+  aklight-net:
+    driver: bridge

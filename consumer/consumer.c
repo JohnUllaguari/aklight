@@ -31,7 +31,7 @@ int main() {
     addr.sin_family = AF_INET;
     addr.sin_port = htons(BROKER_PORT);
 
-    // 🔥 FIX: resolver hostname Docker correctamente
+    //resolver hostname Docker correctamente
     struct hostent *he = gethostbyname(broker_host);
     if (he == NULL) {
         perror("gethostbyname");
@@ -39,7 +39,7 @@ int main() {
     }
     memcpy(&addr.sin_addr, he->h_addr_list[0], he->h_length);
 
-    // 🔥 FIX: verificar connect
+    //verificar connect
     if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         perror("connect");
         exit(1);

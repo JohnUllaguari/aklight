@@ -1,5 +1,6 @@
-FROM python:3.10-slim
+FROM gcc:12
 WORKDIR /app
-RUN pip install psutil
-COPY producer.py .
-CMD ["python", "producer.py"]
+COPY producer.c producer.h ./
+COPY common ./common
+RUN gcc producer.c -I./common -o producer.out
+CMD ["./producer.out"]

@@ -1,4 +1,6 @@
-FROM python:3.10-slim
+FROM gcc:12
 WORKDIR /app
-COPY consumer.py .
-CMD ["python", "consumer.py"]
+COPY consumer.c consumer.h ./
+COPY common ./common
+RUN gcc consumer.c -I./common -o consumer.out
+CMD ["./consumer.out"]

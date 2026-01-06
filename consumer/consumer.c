@@ -1,27 +1,35 @@
 #include "consumer.h"
-#include "../common/protocol.h"
+#include "common/protocol.h"
+
 #include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
 
 int main() {
+    setbuf(stdout, NULL);
+
     int sock;
     struct sockaddr_in addr;
-    char buffer[BUFFER_SIZE];
+    handshake_t h;
+    message_t msg;
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
+
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(PORT);
-    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    addr.sin_port = htons(BROKER_PORT);
+    inet_pton(AF_INET, "broker", &addr.sin_addr);
 
     connect(sock, (struct sockaddr*)&addr, sizeof(addr));
 
-    write(sock, "SUBSCRIBE metrics/docker/#\n", 27);
+    h.role = ROLE_CONSUMER;
+    send(sock, &h, sizeof(h), 0);
 
-    read(sock, buffer, BUFFER_SIZE);
-    printf("📥 Recibido: %s\n", buffer);
+    printf("✅ Consumidor conectado\n");
 
-    close(sock);
-    return 0;
+    while (1) {
+        if (recv(sock, &msg, sizeof(msg), 0) > 0) {
+            printf("📥 [%s] %s\n", msg.topic, msg.payload);
+        }
+    }
 }

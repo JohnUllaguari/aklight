@@ -1,51 +1,20 @@
 services:
-  broker1:
+  broker:
     build: ./broker
-    container_name: broker1
-    networks:
-      - aklight-net
-    volumes:
-      - ./broker/storage:/data
-
-  broker2:
-    build: ./broker
-    container_name: broker2
-    networks:
-      - aklight-net
-    volumes:
-      - ./broker/storage:/data
+    ports:
+      - "5000:5000"
 
   producer1:
     build: ./producer
-    container_name: producer1
     depends_on:
-      - broker1
-    environment:
-      - BROKER_HOST=broker1
-    networks:
-      - aklight-net
+      - broker
 
   producer2:
     build: ./producer
-    container_name: producer2
     depends_on:
-      - broker1
-    environment:
-      - BROKER_HOST=broker1
-    networks:
-      - aklight-net
+      - broker
 
   consumer:
     build: ./consumer
-    container_name: consumer
     depends_on:
-      - broker1
-    environment:
-      - BROKER_HOST=broker1
-      - TOPIC=metrics/docker/#
-    networks:
-      - aklight-net
-
-networks:
-  aklight-net:
-    driver: bridge
+      - broker

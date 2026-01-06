@@ -1,20 +1,42 @@
 services:
-  broker:
+  broker1:
     build: ./broker
     ports:
       - "5000:5000"
+    environment:
+      - BROKER_ID=1
+    hostname: broker1
+
+  broker2:
+    build: ./broker
+    ports:
+      - "5001:5000"
+    environment:
+      - BROKER_ID=2
+    hostname: broker2
 
   producer1:
     build: ./producer
+    environment:
+      - BROKER_HOST=broker1
     depends_on:
-      - broker
+      - broker1
+      - broker2
 
   producer2:
     build: ./producer
+    environment:
+      - BROKER_HOST=broker2
     depends_on:
-      - broker
+      - broker1
+      - broker2
 
   consumer:
     build: ./consumer
+    environment:
+      - BROKER_HOST=broker1
+      - PERSISTENT=1
+      - CLIENT_ID=consumer_1
     depends_on:
-      - broker
+      - broker1
+      - broker2

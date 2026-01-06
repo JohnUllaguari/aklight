@@ -1,41 +1,28 @@
-import requests
-import os
+import socket
+import json
 import time
+import os
 
 BROKER_HOST = os.getenv("BROKER_HOST", "broker1")
-BROKER_PORT = 5000
-
+PORT = 5000
 TOPIC = os.getenv("TOPIC", "metrics/docker/#")
-PERSISTENT = os.getenv("PERSISTENT", "false").lower() == "true"
 
-OFFSET_FILE = "consumer_offset.txt"
-
-def get_messages():
-    url = f"http://{BROKER_HOST}:{BROKER_PORT}/consume"
-    params = {"topic": TOPIC}
-    response = requests.get(url, params=params)
-    return response.json().get("messages", [])
-
-def load_offset():
-    if PERSISTENT and os.path.exists(OFFSET_FILE):
-        with open(OFFSET_FILE) as f:
-            return int(f.read())
-    return 0
-
-def save_offset(offset):
-    if PERSISTENT:
-        with open(OFFSET_FILE, "w") as f:
-            f.write(str(offset))
-
-offset = load_offset()
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.connect((BROKER_HOST, PORT))
+print("✅ Consumidor conectado", flush=True)
 
 while True:
-    messages = get_messages()
+    req = {
+        "type": "consume",
+        "topic": TOPIC
+    }
+    s.sendall((json.dumps(req) + "\n").encode())
 
-    for i in range(offset, len(messages)):
-        print(messages[i].strip())
+    data = s.recv(8192)
+    messages = json.loads(data.decode())
 
-    offset = len(messages)
-    save_offset(offset)
+    print("📥 Mensajes recibidos:", flush=True)
+    for m in messages[-5:]:
+        print("   ", m.strip(), flush=True)
 
     time.sleep(5)

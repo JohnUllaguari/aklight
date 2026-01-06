@@ -1,31 +1,35 @@
-import requests
+import socket
+import json
 import time
 import psutil
 import os
 
 BROKER_HOST = os.getenv("BROKER_HOST", "broker1")
-BROKER_PORT = 5000
-INTERVAL = 5  # segundos
-
+PORT = 5000
 PRODUCER_ID = os.getenv("HOSTNAME", "producer")
 
-def send_metric(topic, value):
-    url = f"http://{BROKER_HOST}:{BROKER_PORT}/publish"
-    payload = {
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+while True:
+    try:
+        s.connect((BROKER_HOST, PORT))
+        print("✅ Productor conectado al broker", flush=True)
+        break
+    except:
+        print("⏳ Esperando broker...", flush=True)
+        time.sleep(2)
+
+def send(topic, value):
+    msg = {
+        "type": "publish",
         "topic": topic,
         "key": PRODUCER_ID,
         "value": value
     }
-    try:
-        requests.post(url, json=payload)
-    except Exception as e:
-        print("Error enviando métrica:", e)
+    s.sendall((json.dumps(msg) + "\n").encode())
+    print(f"📤 Enviado {topic}: {value}", flush=True)
 
 while True:
-    cpu = psutil.cpu_percent()
-    mem = psutil.virtual_memory().percent
-
-    send_metric("metrics/docker/cpu", f"{cpu}%")
-    send_metric("metrics/docker/memory", f"{mem}%")
-
-    time.sleep(INTERVAL)
+    send("metrics/docker/cpu", f"{psutil.cpu_percent()}%")
+    send("metrics/docker/memory", f"{psutil.virtual_memory().percent}%")
+    time.sleep(5)

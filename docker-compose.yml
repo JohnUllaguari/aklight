@@ -6,9 +6,6 @@ services:
       - aklight-net
     volumes:
       - ./broker/storage:/data
-    environment:
-      - BROKER_ID=1
-      - MESSAGE_RETENTION=60
 
   broker2:
     build: ./broker
@@ -17,34 +14,37 @@ services:
       - aklight-net
     volumes:
       - ./broker/storage:/data
-    environment:
-      - BROKER_ID=2
-      - MESSAGE_RETENTION=60
 
   producer1:
     build: ./producer
     container_name: producer1
-    networks:
-      - aklight-net
     depends_on:
       - broker1
+    environment:
+      - BROKER_HOST=broker1
+    networks:
+      - aklight-net
 
   producer2:
     build: ./producer
     container_name: producer2
+    depends_on:
+      - broker1
+    environment:
+      - BROKER_HOST=broker1
     networks:
       - aklight-net
-    depends_on:
-      - broker2
 
   consumer:
     build: ./consumer
     container_name: consumer
-    networks:
-      - aklight-net
     depends_on:
       - broker1
-      - broker2
+    environment:
+      - BROKER_HOST=broker1
+      - TOPIC=metrics/docker/#
+    networks:
+      - aklight-net
 
 networks:
   aklight-net:

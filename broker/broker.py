@@ -1,20 +1,16 @@
-from flask import Flask, request, jsonify
+import socket
+import threading
+import json
 import os
 import time
 import hashlib
 
-app = Flask(__name__)
-
-BROKER_ID = os.getenv("BROKER_ID", "1")
+HOST = "0.0.0.0"
+PORT = 5000
 DATA_PATH = "/data"
 PARTITIONS = 2
 
-# Round-robin counters por tópico
-round_robin_index = {}
-
-# -------------------------------------------------
-# Utilidades
-# -------------------------------------------------
+round_robin = {}
 
 def ensure_path(topic):
     path = os.path.join(DATA_PATH, *topic.split("/"))
@@ -24,74 +20,67 @@ def ensure_path(topic):
 def select_partition(topic, key):
     if key:
         return int(hashlib.md5(key.encode()).hexdigest(), 16) % PARTITIONS
-    else:
-        if topic not in round_robin_index:
-            round_robin_index[topic] = 0
-        partition = round_robin_index[topic]
-        round_robin_index[topic] = (partition + 1) % PARTITIONS
-        return partition
+    round_robin[topic] = (round_robin.get(topic, -1) + 1) % PARTITIONS
+    return round_robin[topic]
 
-# -------------------------------------------------
-# Endpoint: Publicar mensaje (Productor)
-# -------------------------------------------------
+def match_topic(sub, topic):
+    if sub.endswith("/#"):
+        return topic.startswith(sub[:-2])
+    return sub == topic
 
-@app.route("/publish", methods=["POST"])
-def publish():
-    data = request.json
-    topic = data.get("topic")
-    key = data.get("key")
-    value = data.get("value")
+def handle_client(conn):
+    print("📥 Cliente conectado", flush=True)
+    buffer = ""
+    with conn:
+        while True:
+            data = conn.recv(1024)
+            if not data:
+                break
+            buffer += data.decode()
 
-    if not topic or not value:
-        return jsonify({"error": "topic y value requeridos"}), 400
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                msg = json.loads(line)
 
-    partition = select_partition(topic, key)
-    topic_path = ensure_path(topic)
-    file_path = os.path.join(topic_path, f"partition{partition}.log")
+                if msg["type"] == "publish":
+                    topic = msg["topic"]
+                    key = msg.get("key")
+                    value = msg["value"]
 
-    with open(file_path, "a") as f:
-        f.write(f"{int(time.time())}|{key}|{value}\n")
+                    part = select_partition(topic, key)
+                    path = ensure_path(topic)
+                    file = os.path.join(path, f"partition{part}.log")
 
-    return jsonify({
-        "broker": BROKER_ID,
-        "topic": topic,
-        "partition": partition,
-        "status": "stored"
-    })
+                    with open(file, "a") as f:
+                        producer = msg.get("key", "unknown")
+                        f.write(f"{int(time.time())}|{producer}|{value}\n")
 
-# -------------------------------------------------
-# Endpoint: Consumir mensajes (Consumidor)
-# -------------------------------------------------
 
-@app.route("/consume", methods=["GET"])
-def consume():
-    topic = request.args.get("topic")
+                    print(f"📦 Guardado {topic} → partition {part}", flush=True)
+                    conn.sendall(b'{"status":"stored"}\n')
 
-    if not topic:
-        return jsonify({"error": "topic requerido"}), 400
+                elif msg["type"] == "consume":
+                    sub = msg["topic"]
+                    messages = []
 
-    results = []
+                    for root, _, files in os.walk(DATA_PATH):
+                        rel = root.replace(DATA_PATH + "/", "")
+                        if match_topic(sub, rel):
+                            for f in files:
+                                with open(os.path.join(root, f)) as fd:
+                                    messages.extend(fd.readlines())
 
-    for root, dirs, files in os.walk(DATA_PATH):
-        relative = root.replace(DATA_PATH + "/", "")
-        if match_topic(topic, relative):
-            for file in files:
-                with open(os.path.join(root, file)) as f:
-                    results.extend(f.readlines())
+                    conn.sendall((json.dumps(messages) + "\n").encode())
 
-    return jsonify({"messages": results})
+def main():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind((HOST, PORT))
+    s.listen()
+    print(f"🚀 Broker escuchando en puerto {PORT}", flush=True)
 
-# -------------------------------------------------
-# Wildcard multi-nivel (#)
-# -------------------------------------------------
-
-def match_topic(subscription, topic):
-    if subscription.endswith("/#"):
-        base = subscription[:-2]
-        return topic.startswith(base)
-    return subscription == topic
-
-# -------------------------------------------------
+    while True:
+        conn, _ = s.accept()
+        threading.Thread(target=handle_client, args=(conn,), daemon=True).start()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    main()

@@ -15,8 +15,8 @@
 
 typedef struct {
     int fd;
-    int role;                     // producer / consumer
-    char subscription[64];        // solo consumidores
+    int role;
+    char subscription[64];
     int persistent;
     char client_id[32];
     long last_timestamp;
@@ -56,6 +56,49 @@ void persist_message(message_t *msg) {
     fprintf(f, "%ld|%s|%s|%s\n",
             time(NULL), msg->topic, msg->key, msg->payload);
     fclose(f);
+}
+
+/* ====== ENVÍO DE HISTÓRICOS ====== */
+void send_historical_messages(client_t *consumer) {
+    char filename[64];
+    char line[512];
+
+    for (int p = 0; p < NUM_PARTITIONS; p++) {
+        snprintf(filename, sizeof(filename), "partition_%d.log", p);
+        FILE *f = fopen(filename, "r");
+        if (!f) continue;
+
+        while (fgets(line, sizeof(line), f)) {
+            long ts;
+            message_t msg;
+
+            char *token = strtok(line, "|");
+            if (!token) continue;
+            ts = atol(token);
+
+            token = strtok(NULL, "|");
+            if (!token) continue;
+            strcpy(msg.topic, token);
+
+            token = strtok(NULL, "|");
+            if (!token) continue;
+            strcpy(msg.key, token);
+
+            token = strtok(NULL, "\n");
+            if (!token) continue;
+            strcpy(msg.payload, token);
+
+            msg.partition = p;
+
+            if (ts > consumer->last_timestamp &&
+                topic_matches(msg.topic, consumer->subscription)) {
+                send(consumer->fd, &msg, sizeof(msg), 0);
+            }
+        }
+        fclose(f);
+    }
+
+    consumer->last_timestamp = time(NULL);
 }
 
 /* ================= MAIN ================= */
@@ -110,8 +153,14 @@ int main() {
                 strcpy(clients[client_count].client_id, h.client_id);
                 clients[client_count].last_timestamp = 0;
 
-                printf("👂 Consumidor [%s] suscrito a %s\n",
-                       h.client_id, h.subscription);
+                printf("👂 Consumidor [%s] suscrito a %s (%s)\n",
+                       h.client_id,
+                       h.subscription,
+                       h.persistent ? "persistente" : "no persistente");
+
+                if (h.persistent) {
+                    send_historical_messages(&clients[client_count]);
+                }
             } else {
                 printf("✉️ Productor conectado\n");
             }
